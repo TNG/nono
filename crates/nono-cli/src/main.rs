@@ -218,6 +218,8 @@ mod tests {
             upstream_proxy: None,
             upstream_bypass: Vec::new(),
             listen_ports: Vec::new(),
+            network_prompt: None,
+            profile_path: None,
             capability_elevation: false,
             #[cfg(target_os = "linux")]
             wsl2_proxy_policy: crate::profile::Wsl2ProxyPolicy::Error,
@@ -261,6 +263,8 @@ mod tests {
             upstream_proxy: None,
             upstream_bypass: Vec::new(),
             listen_ports: Vec::new(),
+            network_prompt: None,
+            profile_path: None,
             capability_elevation: false,
             #[cfg(target_os = "linux")]
             wsl2_proxy_policy: crate::profile::Wsl2ProxyPolicy::Error,

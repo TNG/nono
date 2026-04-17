@@ -44,6 +44,9 @@ pub enum ProxyError {
 
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
+
+    #[error("Interactive policy denied access to {host}")]
+    InteractiveDenied { host: String },
 }
 
 /// Result type alias for proxy operations.

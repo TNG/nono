@@ -3,6 +3,7 @@
 //! Defines the configuration for the proxy server, including allowed hosts,
 //! credential routes, and external proxy settings.
 
+use crate::interactive::InteractivePolicyConfig;
 use globset::Glob;
 use serde::{Deserialize, Serialize};
 use std::net::IpAddr;
@@ -56,6 +57,16 @@ pub struct ProxyConfig {
     /// Maximum concurrent connections (0 = unlimited).
     #[serde(default)]
     pub max_connections: usize,
+
+    /// Interactive network policy. When set, unknown hosts (those not in
+    /// `allowed_hosts` and not routed) trigger a native OS dialog asking the
+    /// user whether to allow or deny access. Permanent decisions are
+    /// persisted to `interactive.learned_policy_path`.
+    ///
+    /// Hardcoded deny-list entries (cloud metadata, link-local IPs) are
+    /// NOT promptable — they remain absolute blocks.
+    #[serde(default)]
+    pub interactive: Option<InteractivePolicyConfig>,
 }
 
 impl Default for ProxyConfig {
@@ -68,6 +79,7 @@ impl Default for ProxyConfig {
             external_proxy: None,
             direct_connect_ports: Vec::new(),
             max_connections: 256,
+            interactive: None,
         }
     }
 }

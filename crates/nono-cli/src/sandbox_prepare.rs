@@ -426,6 +426,11 @@ pub(crate) struct PreparedSandbox {
     pub(crate) upstream_proxy: Option<String>,
     pub(crate) upstream_bypass: Vec<String>,
     pub(crate) listen_ports: Vec<u16>,
+    /// Profile-declared interactive network prompt configuration.
+    pub(crate) network_prompt: Option<profile::NetworkPromptConfig>,
+    /// Resolved profile path on disk (if the profile came from a file).
+    /// Used to derive the default learned-policy path.
+    pub(crate) profile_path: Option<PathBuf>,
     pub(crate) capability_elevation: bool,
     #[cfg(target_os = "linux")]
     pub(crate) wsl2_proxy_policy: crate::profile::Wsl2ProxyPolicy,
@@ -1001,6 +1006,8 @@ pub(crate) fn prepare_sandbox(args: &SandboxArgs, silent: bool) -> Result<Prepar
                 upstream_proxy: None,
                 upstream_bypass: Vec::new(),
                 listen_ports: Vec::new(),
+                network_prompt: None,
+                profile_path: None,
                 capability_elevation: false,
                 #[cfg(target_os = "linux")]
                 wsl2_proxy_policy: crate::profile::Wsl2ProxyPolicy::default(),
@@ -1032,6 +1039,7 @@ pub(crate) fn prepare_sandbox(args: &SandboxArgs, silent: bool) -> Result<Prepar
         upstream_proxy: profile_upstream_proxy,
         upstream_bypass: profile_upstream_bypass,
         listen_ports: profile_listen_ports,
+        network_prompt: profile_network_prompt,
         open_url_origins,
         open_url_allow_localhost,
         allow_launch_services: profile_allow_launch_services,
@@ -1040,6 +1048,13 @@ pub(crate) fn prepare_sandbox(args: &SandboxArgs, silent: bool) -> Result<Prepar
         override_deny_paths,
         allowed_env_vars: profile_allowed_env_vars,
     } = prepared_profile;
+
+    // Resolve the profile's filesystem location (if any) so we can derive
+    // the default learned-policy path for interactive network prompts.
+    let profile_path: Option<PathBuf> = args
+        .profile
+        .as_deref()
+        .and_then(profile::resolve_profile_path_on_disk);
 
     if let Some(profile) = loaded_profile.as_ref() {
         let profile_warnings = command_blocking_deprecation::collect_profile_warnings(profile);
@@ -1270,6 +1285,8 @@ pub(crate) fn prepare_sandbox(args: &SandboxArgs, silent: bool) -> Result<Prepar
             upstream_proxy: profile_upstream_proxy,
             upstream_bypass: profile_upstream_bypass,
             listen_ports: profile_listen_ports,
+            network_prompt: profile_network_prompt,
+            profile_path,
             capability_elevation,
             #[cfg(target_os = "linux")]
             wsl2_proxy_policy,
