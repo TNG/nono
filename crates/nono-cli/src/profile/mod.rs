@@ -2168,7 +2168,14 @@ pub fn expand_vars(path: &str, workdir: &Path) -> Result<PathBuf> {
     Ok(PathBuf::from(expanded))
 }
 
-/// List available profiles (built-in + user)
+/// List available profiles (built-in + user).
+///
+/// User profiles are files matching `<name>.json` in the profile directory
+/// where `<name>` is a valid profile name (alphanumeric + hyphens, per
+/// [`is_valid_profile_name`]). Companion files emitted by the
+/// `network_prompt` feature (`<name>.learned.json`) and any other file that
+/// does not satisfy the naming rules are ignored so that `policy profiles`
+/// output stays round-trippable with `policy show <name>`.
 pub fn list_profiles() -> Vec<String> {
     let mut profiles = builtin::list_builtin();
 
@@ -2178,11 +2185,22 @@ pub fn list_profiles() -> Vec<String> {
             if dir.exists() {
                 if let Ok(entries) = fs::read_dir(dir) {
                     for entry in entries.flatten() {
-                        if let Some(name) = entry.path().file_stem() {
-                            let name_str = name.to_string_lossy().to_string();
-                            if !profiles.contains(&name_str) {
-                                profiles.push(name_str);
-                            }
+                        let path = entry.path();
+                        // Only consider regular `<name>.json` files.
+                        if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                            continue;
+                        }
+                        let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
+                            continue;
+                        };
+                        // Skip non-profile JSON sidecars such as
+                        // `<profile>.learned.json` which have a compound stem.
+                        if !is_valid_profile_name(stem) {
+                            continue;
+                        }
+                        let name_str = stem.to_string();
+                        if !profiles.contains(&name_str) {
+                            profiles.push(name_str);
                         }
                     }
                 }

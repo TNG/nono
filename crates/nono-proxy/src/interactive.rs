@@ -768,7 +768,7 @@ fn notify_send(host: &str, port: u16, cancel_rx: tokio::sync::watch::Receiver<bo
         Duration::from_secs(120),
         Some(cancel_rx),
     ) {
-        Ok((status, stdout)) if status == 0 => {
+        Ok((0, stdout)) => {
             let chosen = stdout.trim();
             if chosen == "show" {
                 let _ = raise_linux_window(DIALOG_WINDOW_TITLE);
