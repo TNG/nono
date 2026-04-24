@@ -612,11 +612,24 @@ pub(super) fn decide_network_notification(
 
     match syscall {
         SYS_CONNECT => {
-            // Allow connect only to loopback + proxy port
-            if sockaddr.is_loopback && sockaddr.port == config.proxy_port {
+            // Allow connect to:
+            //   (a) loopback + configured proxy port, or
+            //   (b) any host on a port in `proxy_connect_ports`
+            //       (the fallback-mode mirror of Landlock's per-port
+            //       NetPort::ConnectTcp, honoring `allow_tcp_connect`).
+            let loopback_to_proxy = sockaddr.is_loopback && sockaddr.port == config.proxy_port;
+            let allowed_connect_port = config.proxy_connect_ports.contains(&sockaddr.port);
+            if loopback_to_proxy {
                 debug!(
                     "Proxy seccomp: allowing connect to loopback:{}",
                     sockaddr.port
+                );
+                NetworkDecision::Allow
+            } else if allowed_connect_port {
+                debug!(
+                    "Proxy seccomp: allowing connect on allow_tcp_connect port {} \
+                     (family={} loopback={})",
+                    sockaddr.port, sockaddr.family, sockaddr.is_loopback
                 );
                 NetworkDecision::Allow
             } else {

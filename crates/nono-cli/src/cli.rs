@@ -970,6 +970,17 @@ pub struct SandboxArgs {
     )]
     pub allow_port: Vec<u16>,
 
+    /// Allow outbound TCP connect to a port on any host (repeatable).
+    /// Use for non-HTTP protocols: SSH (22), IMAPS (993), SMTP (587), etc.
+    /// The port is enforced at the kernel layer; the destination host is NOT
+    /// constrained (Seatbelt/Landlock have no hostname primitive).
+    #[arg(
+        long = "allow-tcp-connect",
+        value_name = "PORT",
+        help_heading = "NETWORK"
+    )]
+    pub allow_tcp_connect: Vec<u16>,
+
     /// Chain outbound traffic through an upstream proxy (host:port)
     #[arg(
         long = "upstream-proxy",
@@ -1219,6 +1230,17 @@ pub struct WrapSandboxArgs {
     )]
     pub allow_port: Vec<u16>,
 
+    /// Allow outbound TCP connect to a port on any host (repeatable).
+    /// Use for non-HTTP protocols: SSH (22), IMAPS (993), SMTP (587), etc.
+    /// The port is enforced at the kernel layer; the destination host is NOT
+    /// constrained (Seatbelt/Landlock have no hostname primitive).
+    #[arg(
+        long = "allow-tcp-connect",
+        value_name = "PORT",
+        help_heading = "NETWORK"
+    )]
+    pub allow_tcp_connect: Vec<u16>,
+
     // ── Credentials ──────────────────────────────────────────────────────
     /// Load credentials as env vars
     #[arg(
@@ -1317,6 +1339,7 @@ impl From<WrapSandboxArgs> for SandboxArgs {
             allow_proxy: Vec::new(),
             allow_bind: args.allow_bind,
             allow_port: args.allow_port,
+            allow_tcp_connect: args.allow_tcp_connect,
             external_proxy: None,
             external_proxy_bypass: Vec::new(),
             proxy_port: None,

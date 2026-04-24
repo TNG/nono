@@ -752,10 +752,14 @@ pub struct CapabilitySet {
     unix_sockets: Vec<UnixSocketCapability>,
     /// Network access mode (default: AllowAll)
     network_mode: NetworkMode,
-    /// Per-port TCP connect allowlist (Linux Landlock V4+ only).
-    /// Adding any entry implies Blocked base with specific port exceptions.
+    /// Per-port TCP connect allowlist.
+    /// On Linux, enforced by Landlock `NetPort` (ABI V4+) or by the seccomp
+    /// supervisor fallback on older kernels. On macOS, emitted as Seatbelt
+    /// `(remote tcp "*:PORT")` rules. Wildcard-host: the port filter is
+    /// enforced but the destination IP is not. In `AllowAll` mode these
+    /// entries are informational (all ports are already reachable).
     tcp_connect_ports: Vec<u16>,
-    /// Per-port TCP bind allowlist (Linux Landlock V4+ only).
+    /// Per-port TCP bind allowlist (Linux Landlock V4+ only; unsupported on macOS).
     tcp_bind_ports: Vec<u16>,
     /// TCP ports allowed for bidirectional IPC (connect + bind).
     /// These apply regardless of NetworkMode.
@@ -896,10 +900,15 @@ impl CapabilitySet {
         self
     }
 
-    /// Allow TCP connect to a specific port (builder pattern)
+    /// Allow TCP connect to a specific port, any host (builder pattern)
     ///
-    /// Linux Landlock V4+ only. Adding any port rule automatically blocks
-    /// all other network access (allowlist model). Returns an error on macOS.
+    /// Adds a per-port outbound TCP allowance. The destination host is not
+    /// constrained at the kernel layer.
+    ///
+    /// * **Linux**: requires Landlock ABI V4+ (kernel 6.7+). On older kernels
+    ///   the supervisor's seccomp-notify fallback enforces the same allowlist.
+    /// * **macOS**: emits `(allow network-outbound (remote tcp "*:PORT"))` in
+    ///   `Blocked`/`ProxyOnly` modes. In `AllowAll` mode this is a no-op.
     #[must_use]
     pub fn allow_tcp_connect(mut self, port: u16) -> Self {
         self.tcp_connect_ports.push(port);
@@ -908,7 +917,8 @@ impl CapabilitySet {
 
     /// Allow TCP bind on a specific port (builder pattern)
     ///
-    /// Linux Landlock V4+ only. Returns an error on macOS.
+    /// Linux Landlock V4+ only. Returns an error on macOS (Seatbelt has no
+    /// per-port bind filter).
     #[must_use]
     pub fn allow_tcp_bind(mut self, port: u16) -> Self {
         self.tcp_bind_ports.push(port);

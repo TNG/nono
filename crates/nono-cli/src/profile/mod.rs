@@ -866,6 +866,18 @@ pub struct NetworkConfig {
         alias = "allow_port"
     )]
     pub open_port: Vec<u16>,
+    /// Outbound TCP connect ports allowed to any destination host.
+    /// Equivalent to the `--allow-tcp-connect` CLI flag.
+    ///
+    /// Use this for non-HTTP protocols (SSH:22, IMAPS:993, SMTP:587, etc.)
+    /// that cannot traverse the HTTP proxy. The sandbox enforces the port
+    /// allowlist at the kernel layer; it does NOT constrain the destination
+    /// host (Seatbelt and Landlock both lack hostname filtering primitives).
+    /// On macOS, this emits `(allow network-outbound (remote tcp "*:PORT"))`.
+    /// On Linux, this uses Landlock `NetPort::ConnectTcp` (kernel 6.7+) or
+    /// the seccomp-notify fallback.
+    #[serde(default)]
+    pub allow_tcp_connect: Vec<u16>,
     /// TCP ports the sandboxed child may listen on.
     /// Equivalent to `--listen-port` CLI flag.
     #[serde(default)]
@@ -1897,6 +1909,10 @@ fn merge_profiles(base: Profile, child: Profile) -> Profile {
                 .merge(base.network.network_profile),
             allow_domain: dedup_append(&base.network.allow_domain, &child.network.allow_domain),
             open_port: dedup_append(&base.network.open_port, &child.network.open_port),
+            allow_tcp_connect: dedup_append(
+                &base.network.allow_tcp_connect,
+                &child.network.allow_tcp_connect,
+            ),
             listen_port: dedup_append(&base.network.listen_port, &child.network.listen_port),
             // Child `Some([])` overrides parent credentials to empty (disables proxy).
             // Child `None` inherits parent credentials. Child `Some([...])` merges with parent.
@@ -2402,6 +2418,46 @@ mod tests {
         assert!(profiles.contains(&"codex".to_string()));
         assert!(profiles.contains(&"openclaw".to_string()));
         assert!(profiles.contains(&"opencode".to_string()));
+    }
+
+    #[test]
+    fn test_allow_tcp_connect_parses_and_merges() {
+        let json_str = r#"{
+            "meta": { "name": "child" },
+            "network": {
+                "allow_tcp_connect": [22, 993, 587]
+            }
+        }"#;
+
+        let profile: Profile = serde_json::from_str(json_str).expect("Failed to parse profile");
+        assert_eq!(profile.network.allow_tcp_connect, vec![22, 993, 587]);
+
+        let base = Profile {
+            meta: ProfileMeta {
+                name: "base".to_string(),
+                ..Default::default()
+            },
+            network: NetworkConfig {
+                allow_tcp_connect: vec![22],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let child = Profile {
+            meta: ProfileMeta {
+                name: "child".to_string(),
+                ..Default::default()
+            },
+            network: NetworkConfig {
+                allow_tcp_connect: vec![22, 993],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let merged = merge_profiles(base, child);
+        // Deduplicated union.
+        assert_eq!(merged.network.allow_tcp_connect, vec![22, 993]);
     }
 
     #[test]
@@ -3528,6 +3584,7 @@ mod tests {
                 network_profile: InheritableValue::Set("base-net".to_string()),
                 allow_domain: vec!["base.example.com".to_string()],
                 open_port: vec![3000],
+                allow_tcp_connect: Vec::new(),
                 listen_port: vec![4000],
                 credentials: Some(vec!["base_cred".to_string()]),
                 custom_credentials: HashMap::new(),
@@ -3607,6 +3664,7 @@ mod tests {
                 network_profile: InheritableValue::Inherit,
                 allow_domain: vec!["child.example.com".to_string()],
                 open_port: vec![3000, 5000],
+                allow_tcp_connect: Vec::new(),
                 listen_port: vec![4000, 6000],
                 credentials: None,
                 custom_credentials: HashMap::new(),
