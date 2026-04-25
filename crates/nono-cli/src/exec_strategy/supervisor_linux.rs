@@ -998,6 +998,7 @@ mod tests {
                 allow_launch_services_active: false,
                 proxy_port,
                 proxy_bind_ports,
+                proxy_connect_ports: Vec::new(),
             }
         }
 
