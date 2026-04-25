@@ -19,6 +19,7 @@ pub(crate) struct PreparedProfile {
     pub(crate) upstream_proxy: Option<String>,
     pub(crate) upstream_bypass: Vec<String>,
     pub(crate) listen_ports: Vec<u16>,
+    pub(crate) network_prompt: Option<profile::NetworkPromptConfig>,
     pub(crate) open_url_origins: Vec<String>,
     pub(crate) open_url_allow_localhost: bool,
     pub(crate) allow_launch_services: bool,
@@ -349,6 +350,9 @@ fn prepare_profile_with_options(
             .as_ref()
             .map(|profile| profile.network.listen_port.clone())
             .unwrap_or_default(),
+        network_prompt: loaded_profile
+            .as_ref()
+            .and_then(|profile| profile.network.network_prompt.clone()),
         open_url_origins: loaded_profile
             .as_ref()
             .and_then(|profile| profile.open_urls.as_ref())

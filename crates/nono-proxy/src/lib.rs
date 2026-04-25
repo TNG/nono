@@ -24,6 +24,7 @@ pub mod credential;
 pub mod error;
 pub mod external;
 pub mod filter;
+pub mod interactive;
 pub mod oauth2;
 pub mod reverse;
 pub mod route;
@@ -32,4 +33,8 @@ pub mod token;
 
 pub use config::ProxyConfig;
 pub use error::{ProxyError, Result};
+pub use interactive::{
+    InteractivePolicy, InteractivePolicyConfig, NativeNotifier, NoopNotifier, Notifier,
+    OnUnavailable, PermanentDecision, PromptDecision,
+};
 pub use server::{start, ProxyHandle};

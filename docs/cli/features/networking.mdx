@@ -235,6 +235,40 @@ This generates Seatbelt rules (macOS) or Landlock rules (Linux) that allow both 
 
 See [CLI Reference](/cli/usage/flags#--open-port) for full details and platform limitations.
 
+## Non-HTTP Outbound (SSH, IMAP, SMTP, ...)
+
+The proxy-based domain filter only understands HTTP/HTTPS. Protocols that don't speak HTTP — SSH, IMAP(S), SMTP, IRC, database wire protocols — cannot traverse the proxy and would be blocked in restricted network modes.
+
+Use `--allow-tcp-connect <PORT>` to open specific outbound ports at the kernel layer. The port is enforced, but the destination host is **not** constrained: Seatbelt (macOS) and Landlock (Linux) do not support hostname filtering for non-HTTP protocols.
+
+```bash
+# Git over SSH + fetch email from IMAPS
+nono run --network-profile developer \
+         --allow-tcp-connect 22 \
+         --allow-tcp-connect 993 \
+         --allow-cwd -- <your-command>
+```
+
+Equivalent profile entry:
+
+```json
+{
+  "network": {
+    "network_profile": "developer",
+    "allow_tcp_connect": [22, 993, 587]
+  }
+}
+```
+
+Platform notes:
+
+- **macOS**: emits `(allow network-outbound (remote tcp "*:PORT"))`. Any host reachable on that port.
+- **Linux (kernel 6.7+)**: uses Landlock `NetPort::ConnectTcp`. Any host on that port.
+- **Linux (kernel &lt; 6.7)**: enforced by the supervisor's seccomp-notify fallback.
+- **WSL2**: per-port filtering is unavailable; use `--block-net=false` or accept unfiltered outbound.
+
+This is a deliberate relaxation of the sandbox. Prefer HTTPS alternatives where they exist (e.g., `https://github.com/...` with a token instead of `git@github.com:...`).
+
 ### Listen-Only Ports
 
 Use `--listen-port` when a sandboxed process needs to accept inbound connections but does not need to initiate outbound connections on that port (e.g., a server or gateway):

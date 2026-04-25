@@ -536,6 +536,11 @@ impl CapabilitySetExt for CapabilitySet {
             caps.add_localhost_port(*port);
         }
 
+        // Outbound TCP connect ports (any host) — for non-HTTP protocols.
+        for port in &args.allow_tcp_connect {
+            caps.add_tcp_connect_port(*port);
+        }
+
         // Command allow/block lists
         for cmd in &args.allow_command {
             caps.add_allowed_command(cmd.clone());
@@ -872,6 +877,11 @@ impl CapabilitySetExt for CapabilitySet {
             caps.add_localhost_port(*port);
         }
 
+        // Outbound TCP connect ports (any host) from profile.
+        for port in &profile.network.allow_tcp_connect {
+            caps.add_tcp_connect_port(*port);
+        }
+
         // Apply allowed commands from profile
         for cmd in &profile.security.allowed_commands {
             caps.add_allowed_command(cmd.as_str());
@@ -1047,6 +1057,11 @@ fn add_cli_overrides(
     // Localhost IPC ports from CLI
     for port in &args.allow_port {
         caps.add_localhost_port(*port);
+    }
+
+    // Outbound TCP connect ports (any host) from CLI (additive to profile).
+    for port in &args.allow_tcp_connect {
+        caps.add_tcp_connect_port(*port);
     }
 
     // Command allow/block from CLI

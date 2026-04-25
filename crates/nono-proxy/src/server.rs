@@ -14,6 +14,7 @@ use crate::credential::CredentialStore;
 use crate::error::{ProxyError, Result};
 use crate::external;
 use crate::filter::ProxyFilter;
+use crate::interactive::InteractivePolicy;
 use crate::reverse;
 use crate::route::RouteStore;
 use crate::token;
@@ -219,6 +220,7 @@ pub async fn start(config: ProxyConfig) -> Result<ProxyHandle> {
     } else {
         RouteStore::load(&config.routes)?
     };
+
     // Build shared TLS connector (root cert store is expensive to construct).
     // Use the ring provider explicitly to avoid ambiguity when multiple
     // crypto providers are in the dependency tree.
@@ -243,11 +245,37 @@ pub async fn start(config: ProxyConfig) -> Result<ProxyHandle> {
     };
     let loaded_routes = credential_store.loaded_prefixes();
 
-    // Build filter
-    let filter = if config.allowed_hosts.is_empty() {
+    // Build interactive policy (if configured) BEFORE the filter so we can
+    // attach it to the filter. Loading the policy reads the learned file
+    // from disk; the parent directory is auto-created if missing.
+    let interactive_policy = match &config.interactive {
+        Some(cfg) => {
+            info!(
+                "Interactive network prompt enabled (learned policy: {})",
+                cfg.learned_policy_path.display()
+            );
+            Some(InteractivePolicy::load(cfg.clone())?)
+        }
+        None => None,
+    };
+
+    // Build filter. When interactive mode is on, start from an empty
+    // allowlist so every unknown host triggers a prompt, but also merge in
+    // any explicitly allowed hosts from `allowed_hosts` so they pass
+    // through without prompting.
+    let filter = if config.allowed_hosts.is_empty() && interactive_policy.is_none() {
         ProxyFilter::allow_all()
     } else {
         ProxyFilter::new(&config.allowed_hosts)
+    };
+    let filter = if let Some(policy) = &interactive_policy {
+        info!(
+            "Attaching interactive policy to proxy filter ({} hosts explicitly allowed)",
+            filter.allowed_count()
+        );
+        filter.with_interactive(Arc::clone(policy))
+    } else {
+        filter
     };
 
     // Build bypass matcher from external proxy config (once, not per-request)

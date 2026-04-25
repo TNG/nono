@@ -456,11 +456,13 @@ pub fn apply_with_abi(caps: &CapabilitySet, abi: &DetectedAbi) -> Result<Seccomp
                 SeccompNetFallback::ProxyOnly {
                     proxy_port,
                     bind_ports,
+                    connect_ports,
                 } => {
                     warn!(
                         "Landlock ABI {:?} lacks TCP network filtering; \
-                         using seccomp proxy-only fallback (port={}, bind_ports={:?})",
-                        target_abi, proxy_port, bind_ports
+                         using seccomp proxy-only fallback (port={}, bind_ports={:?}, \
+                         connect_ports={:?})",
+                        target_abi, proxy_port, bind_ports, connect_ports
                     );
                     seccomp_net_fallback = fallback;
                     ruleset_builder
@@ -1599,6 +1601,10 @@ pub enum SeccompNetFallback {
         proxy_port: u16,
         /// Ports to allow bind() on (e.g. MCP servers).
         bind_ports: Vec<u16>,
+        /// Additional TCP connect ports allowed to any destination host.
+        /// This is the fallback-mode mirror of Landlock `NetPort::ConnectTcp`
+        /// rules added from `CapabilitySet::tcp_connect_ports`.
+        connect_ports: Vec<u16>,
     },
 }
 
@@ -1624,6 +1630,7 @@ pub fn seccomp_network_fallback_mode(caps: &CapabilitySet) -> SeccompNetFallback
         NetworkMode::ProxyOnly { port, bind_ports } => SeccompNetFallback::ProxyOnly {
             proxy_port: *port,
             bind_ports: bind_ports.clone(),
+            connect_ports: caps.tcp_connect_ports().to_vec(),
         },
         NetworkMode::AllowAll => SeccompNetFallback::None,
     }
@@ -2700,6 +2707,7 @@ mod tests {
             SeccompNetFallback::ProxyOnly {
                 proxy_port: 8080,
                 bind_ports: vec![],
+                connect_ports: vec![],
             }
         );
     }
@@ -2712,6 +2720,23 @@ mod tests {
             SeccompNetFallback::ProxyOnly {
                 proxy_port: 8080,
                 bind_ports: vec![3000, 3001],
+                connect_ports: vec![],
+            }
+        );
+    }
+
+    #[test]
+    fn test_seccomp_network_fallback_mode_proxy_only_with_connect_ports() {
+        let caps = CapabilitySet::new()
+            .proxy_only(8080)
+            .allow_tcp_connect(22)
+            .allow_tcp_connect(993);
+        assert_eq!(
+            seccomp_network_fallback_mode(&caps),
+            SeccompNetFallback::ProxyOnly {
+                proxy_port: 8080,
+                bind_ports: vec![],
+                connect_ports: vec![22, 993],
             }
         );
     }

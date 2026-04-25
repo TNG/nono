@@ -866,6 +866,18 @@ pub struct NetworkConfig {
         alias = "allow_port"
     )]
     pub open_port: Vec<u16>,
+    /// Outbound TCP connect ports allowed to any destination host.
+    /// Equivalent to the `--allow-tcp-connect` CLI flag.
+    ///
+    /// Use this for non-HTTP protocols (SSH:22, IMAPS:993, SMTP:587, etc.)
+    /// that cannot traverse the HTTP proxy. The sandbox enforces the port
+    /// allowlist at the kernel layer; it does NOT constrain the destination
+    /// host (Seatbelt and Landlock both lack hostname filtering primitives).
+    /// On macOS, this emits `(allow network-outbound (remote tcp "*:PORT"))`.
+    /// On Linux, this uses Landlock `NetPort::ConnectTcp` (kernel 6.7+) or
+    /// the seccomp-notify fallback.
+    #[serde(default)]
+    pub allow_tcp_connect: Vec<u16>,
     /// TCP ports the sandboxed child may listen on.
     /// Equivalent to `--listen-port` CLI flag.
     #[serde(default)]
@@ -885,6 +897,42 @@ pub struct NetworkConfig {
     /// `external_proxy_bypass` accepted).
     #[serde(default, rename = "upstream_bypass", alias = "external_proxy_bypass")]
     pub upstream_bypass: Vec<String>,
+    /// Interactive prompt configuration. When set (even as `{}`), unknown
+    /// hosts trigger a native OS dialog asking the user whether to allow or
+    /// deny access. Permanent decisions are persisted to a learned-policy
+    /// file next to the profile.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub network_prompt: Option<NetworkPromptConfig>,
+}
+
+/// Profile-level configuration for interactive network prompting.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NetworkPromptConfig {
+    /// Enable the interactive prompt. Defaults to `true` when the
+    /// `network_prompt` object is present at all.
+    #[serde(default = "default_network_prompt_enabled")]
+    pub enabled: bool,
+
+    /// Override the learned-policy file path. If unset, the path defaults
+    /// to the profile path with `.learned.json` appended (for user profiles)
+    /// or `$XDG_CONFIG_HOME/nono/learned/<profile>.json` (for built-in
+    /// profiles).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub learned_policy_path: Option<PathBuf>,
+
+    /// Prompt timeout in seconds (default: 60).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_timeout_secs: Option<u64>,
+
+    /// Behaviour when no dialog backend is available.
+    /// One of `"deny"` (default) or `"allow"`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub on_unavailable: Option<String>,
+}
+
+fn default_network_prompt_enabled() -> bool {
+    true
 }
 
 impl NetworkConfig {
@@ -903,6 +951,7 @@ impl NetworkConfig {
             || !self.allow_domain.is_empty()
             || !self.resolved_credentials().is_empty()
             || self.upstream_proxy.is_some()
+            || self.network_prompt.as_ref().is_some_and(|p| p.enabled)
     }
 }
 
@@ -1549,6 +1598,29 @@ fn load_registry_profile(name_or_path: &str) -> Result<Profile> {
     )))
 }
 
+/// Resolve the on-disk location of a profile, if any.
+///
+/// Applies the same name-vs-path heuristic as [`load_profile`]. Returns
+/// `None` for built-in profiles (which have no filesystem backing).
+pub fn resolve_profile_path_on_disk(name_or_path: &str) -> Option<PathBuf> {
+    if name_or_path.contains('/') || name_or_path.ends_with(".json") {
+        let p = PathBuf::from(name_or_path);
+        if p.exists() {
+            return Some(p);
+        }
+        return None;
+    }
+    if !is_valid_profile_name(name_or_path) {
+        return None;
+    }
+    let profile_path = get_user_profile_path(name_or_path).ok()?;
+    if profile_path.exists() {
+        Some(profile_path)
+    } else {
+        None
+    }
+}
+
 /// Load a profile from a direct file path.
 ///
 /// The path must exist and point to a valid JSON profile file.
@@ -1837,6 +1909,10 @@ fn merge_profiles(base: Profile, child: Profile) -> Profile {
                 .merge(base.network.network_profile),
             allow_domain: dedup_append(&base.network.allow_domain, &child.network.allow_domain),
             open_port: dedup_append(&base.network.open_port, &child.network.open_port),
+            allow_tcp_connect: dedup_append(
+                &base.network.allow_tcp_connect,
+                &child.network.allow_tcp_connect,
+            ),
             listen_port: dedup_append(&base.network.listen_port, &child.network.listen_port),
             // Child `Some([])` overrides parent credentials to empty (disables proxy).
             // Child `None` inherits parent credentials. Child `Some([...])` merges with parent.
@@ -1866,6 +1942,8 @@ fn merge_profiles(base: Profile, child: Profile) -> Profile {
                 &base.network.upstream_bypass,
                 &child.network.upstream_bypass,
             ),
+            // Child overrides base interactive-prompt config if specified.
+            network_prompt: child.network.network_prompt.or(base.network.network_prompt),
         },
         env_credentials: SecretsConfig {
             mappings: {
@@ -2106,7 +2184,14 @@ pub fn expand_vars(path: &str, workdir: &Path) -> Result<PathBuf> {
     Ok(PathBuf::from(expanded))
 }
 
-/// List available profiles (built-in + user)
+/// List available profiles (built-in + user).
+///
+/// User profiles are files matching `<name>.json` in the profile directory
+/// where `<name>` is a valid profile name (alphanumeric + hyphens, per
+/// [`is_valid_profile_name`]). Companion files emitted by the
+/// `network_prompt` feature (`<name>.learned.json`) and any other file that
+/// does not satisfy the naming rules are ignored so that `policy profiles`
+/// output stays round-trippable with `policy show <name>`.
 pub fn list_profiles() -> Vec<String> {
     let mut profiles = builtin::list_builtin();
 
@@ -2116,11 +2201,22 @@ pub fn list_profiles() -> Vec<String> {
             if dir.exists() {
                 if let Ok(entries) = fs::read_dir(dir) {
                     for entry in entries.flatten() {
-                        if let Some(name) = entry.path().file_stem() {
-                            let name_str = name.to_string_lossy().to_string();
-                            if !profiles.contains(&name_str) {
-                                profiles.push(name_str);
-                            }
+                        let path = entry.path();
+                        // Only consider regular `<name>.json` files.
+                        if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                            continue;
+                        }
+                        let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
+                            continue;
+                        };
+                        // Skip non-profile JSON sidecars such as
+                        // `<profile>.learned.json` which have a compound stem.
+                        if !is_valid_profile_name(stem) {
+                            continue;
+                        }
+                        let name_str = stem.to_string();
+                        if !profiles.contains(&name_str) {
+                            profiles.push(name_str);
                         }
                     }
                 }
@@ -2322,6 +2418,46 @@ mod tests {
         assert!(profiles.contains(&"codex".to_string()));
         assert!(profiles.contains(&"openclaw".to_string()));
         assert!(profiles.contains(&"opencode".to_string()));
+    }
+
+    #[test]
+    fn test_allow_tcp_connect_parses_and_merges() {
+        let json_str = r#"{
+            "meta": { "name": "child" },
+            "network": {
+                "allow_tcp_connect": [22, 993, 587]
+            }
+        }"#;
+
+        let profile: Profile = serde_json::from_str(json_str).expect("Failed to parse profile");
+        assert_eq!(profile.network.allow_tcp_connect, vec![22, 993, 587]);
+
+        let base = Profile {
+            meta: ProfileMeta {
+                name: "base".to_string(),
+                ..Default::default()
+            },
+            network: NetworkConfig {
+                allow_tcp_connect: vec![22],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let child = Profile {
+            meta: ProfileMeta {
+                name: "child".to_string(),
+                ..Default::default()
+            },
+            network: NetworkConfig {
+                allow_tcp_connect: vec![22, 993],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let merged = merge_profiles(base, child);
+        // Deduplicated union.
+        assert_eq!(merged.network.allow_tcp_connect, vec![22, 993]);
     }
 
     #[test]
@@ -3448,11 +3584,13 @@ mod tests {
                 network_profile: InheritableValue::Set("base-net".to_string()),
                 allow_domain: vec!["base.example.com".to_string()],
                 open_port: vec![3000],
+                allow_tcp_connect: Vec::new(),
                 listen_port: vec![4000],
                 credentials: Some(vec!["base_cred".to_string()]),
                 custom_credentials: HashMap::new(),
                 upstream_proxy: None,
                 upstream_bypass: Vec::new(),
+                network_prompt: None,
             },
             env_credentials: SecretsConfig {
                 mappings: {
@@ -3526,11 +3664,13 @@ mod tests {
                 network_profile: InheritableValue::Inherit,
                 allow_domain: vec!["child.example.com".to_string()],
                 open_port: vec![3000, 5000],
+                allow_tcp_connect: Vec::new(),
                 listen_port: vec![4000, 6000],
                 credentials: None,
                 custom_credentials: HashMap::new(),
                 upstream_proxy: None,
                 upstream_bypass: Vec::new(),
+                network_prompt: None,
             },
             env_credentials: SecretsConfig {
                 mappings: {

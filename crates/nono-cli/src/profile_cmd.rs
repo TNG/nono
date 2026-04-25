@@ -886,6 +886,7 @@ pub(crate) fn cmd_show(args: ProfileShowArgs) -> Result<()> {
         || !net.allow_domain.is_empty()
         || !net.resolved_credentials().is_empty()
         || !net.open_port.is_empty()
+        || !net.allow_tcp_connect.is_empty()
         || !net.listen_port.is_empty()
         || net.upstream_proxy.is_some()
         || !net.upstream_bypass.is_empty();
@@ -922,6 +923,18 @@ pub(crate) fn cmd_show(args: ProfileShowArgs) -> Result<()> {
             println!(
                 "    {}: {}",
                 theme::fg("open_port", t.subtext),
+                ports.join(", ")
+            );
+        }
+        if !net.allow_tcp_connect.is_empty() {
+            let ports: Vec<String> = net
+                .allow_tcp_connect
+                .iter()
+                .map(|p| p.to_string())
+                .collect();
+            println!(
+                "    {}: {}",
+                theme::fg("allow_tcp_connect", t.subtext),
                 ports.join(", ")
             );
         }
@@ -1088,6 +1101,7 @@ fn profile_to_json(
         "allow_domain": profile.network.allow_domain,
         "credentials": profile.network.resolved_credentials(),
         "open_port": profile.network.open_port,
+        "allow_tcp_connect": profile.network.allow_tcp_connect,
         "listen_port": profile.network.listen_port,
         "upstream_proxy": profile.network.upstream_proxy,
         "upstream_bypass": profile.network.upstream_bypass,
@@ -1357,7 +1371,22 @@ pub(crate) fn cmd_diff(args: ProfileDiffArgs) -> Result<()> {
 
     let port1: Vec<String> = p1.network.open_port.iter().map(|p| p.to_string()).collect();
     let port2: Vec<String> = p2.network.open_port.iter().map(|p| p.to_string()).collect();
-    let port_diffs = diff_string_vecs(&[("open_port", &port1, &port2)]);
+    let tcp1: Vec<String> = p1
+        .network
+        .allow_tcp_connect
+        .iter()
+        .map(|p| p.to_string())
+        .collect();
+    let tcp2: Vec<String> = p2
+        .network
+        .allow_tcp_connect
+        .iter()
+        .map(|p| p.to_string())
+        .collect();
+    let port_diffs = diff_string_vecs(&[
+        ("open_port", &port1, &port2),
+        ("allow_tcp_connect", &tcp1, &tcp2),
+    ]);
     let listen1: Vec<String> = p1
         .network
         .listen_port
@@ -1842,6 +1871,11 @@ fn diff_to_json(name1: &str, name2: &str, p1: &Profile, p2: &Profile) -> serde_j
                 "profile1": p1.network.open_port,
                 "profile2": p2.network.open_port,
                 "changed": p1.network.open_port != p2.network.open_port,
+            },
+            "allow_tcp_connect": {
+                "profile1": p1.network.allow_tcp_connect,
+                "profile2": p2.network.allow_tcp_connect,
+                "changed": p1.network.allow_tcp_connect != p2.network.allow_tcp_connect,
             },
             "listen_port": {
                 "profile1": p1.network.listen_port,
@@ -2398,11 +2432,19 @@ fn resolve_to_manifest(
         allow_domains: prof.network.allow_domain.clone(),
         endpoints: Vec::new(),
         dns: true,
-        ports: if prof.network.listen_port.is_empty() && prof.network.open_port.is_empty() {
+        ports: if prof.network.listen_port.is_empty()
+            && prof.network.open_port.is_empty()
+            && prof.network.allow_tcp_connect.is_empty()
+        {
             None
         } else {
             Some(manifest::PortConfig {
-                connect: Vec::new(),
+                connect: prof
+                    .network
+                    .allow_tcp_connect
+                    .iter()
+                    .filter_map(|p| std::num::NonZeroU64::new(u64::from(*p)))
+                    .collect(),
                 bind: prof
                     .network
                     .listen_port

@@ -381,6 +381,31 @@
           "type": "array",
           "items": { "type": "string" },
           "description": "Legacy alias for upstream_bypass."
+        },
+        "network_prompt": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Interactive network prompt configuration. When set, unknown hosts trigger a native OS dialog asking the user whether to allow or deny access. Permanent decisions are persisted to a learned-policy file alongside the profile.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable the interactive prompt. Defaults to true when the network_prompt object is present."
+            },
+            "learned_policy_path": {
+              "type": "string",
+              "description": "Override the learned-policy file path. Defaults to <profile>.learned.json next to the profile file."
+            },
+            "prompt_timeout_secs": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Timeout in seconds before a prompt is treated as unavailable (default: 60)."
+            },
+            "on_unavailable": {
+              "type": "string",
+              "enum": ["allow", "deny"],
+              "description": "Fallback behavior when no dialog backend is available (default: deny)."
+            }
+          }
         }
       }
     },

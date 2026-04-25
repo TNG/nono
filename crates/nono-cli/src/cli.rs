@@ -924,7 +924,8 @@ pub struct SandboxArgs {
             "proxy_credential",
             "external_proxy",
             "external_proxy_bypass",
-            "proxy_port"
+            "proxy_port",
+            "network_prompt"
         ],
         hide = true,
         help_heading = "NETWORK"
@@ -969,6 +970,17 @@ pub struct SandboxArgs {
     )]
     pub allow_port: Vec<u16>,
 
+    /// Allow outbound TCP connect to a port on any host (repeatable).
+    /// Use for non-HTTP protocols: SSH (22), IMAPS (993), SMTP (587), etc.
+    /// The port is enforced at the kernel layer; the destination host is NOT
+    /// constrained (Seatbelt/Landlock have no hostname primitive).
+    #[arg(
+        long = "allow-tcp-connect",
+        value_name = "PORT",
+        help_heading = "NETWORK"
+    )]
+    pub allow_tcp_connect: Vec<u16>,
+
     /// Chain outbound traffic through an upstream proxy (host:port)
     #[arg(
         long = "upstream-proxy",
@@ -993,6 +1005,20 @@ pub struct SandboxArgs {
     /// Fixed port for the credential proxy (default: OS-assigned)
     #[arg(long, value_name = "PORT", help_heading = "NETWORK")]
     pub proxy_port: Option<u16>,
+
+    /// Interactively prompt (via a native OS dialog) before allowing traffic
+    /// to domains not explicitly allowed by the profile. Permanent
+    /// "allow"/"deny" decisions are persisted to a learned-policy file
+    /// alongside the active profile. Cloud metadata IPs are never promptable.
+    #[arg(
+        long = "network-prompt",
+        alias = "interactive-network",
+        env = "NONO_NETWORK_PROMPT",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        action = clap::ArgAction::SetTrue,
+        help_heading = "NETWORK"
+    )]
+    pub network_prompt: bool,
 
     // ── Credentials ──────────────────────────────────────────────────────
     /// Inject credentials via reverse proxy for a service (repeatable)
@@ -1076,6 +1102,7 @@ pub struct SandboxArgs {
             "profile", "override_deny", "allow_cwd",
             "block_net", "allow_net", "network_profile", "allow_proxy",
             "allow_bind", "allow_port", "external_proxy", "proxy_port",
+            "network_prompt",
             "proxy_credential", "allow_endpoint", "env_credential", "env_credential_map",
             "allow_command", "block_command", "allow_launch_services", "allow_gpu",
         ],
@@ -1099,6 +1126,7 @@ impl SandboxArgs {
             || !self.allow_proxy.is_empty()
             || !self.proxy_credential.is_empty()
             || self.external_proxy.is_some()
+            || self.network_prompt
     }
 }
 
@@ -1202,6 +1230,17 @@ pub struct WrapSandboxArgs {
     )]
     pub allow_port: Vec<u16>,
 
+    /// Allow outbound TCP connect to a port on any host (repeatable).
+    /// Use for non-HTTP protocols: SSH (22), IMAPS (993), SMTP (587), etc.
+    /// The port is enforced at the kernel layer; the destination host is NOT
+    /// constrained (Seatbelt/Landlock have no hostname primitive).
+    #[arg(
+        long = "allow-tcp-connect",
+        value_name = "PORT",
+        help_heading = "NETWORK"
+    )]
+    pub allow_tcp_connect: Vec<u16>,
+
     // ── Credentials ──────────────────────────────────────────────────────
     /// Load credentials as env vars
     #[arg(
@@ -1300,9 +1339,11 @@ impl From<WrapSandboxArgs> for SandboxArgs {
             allow_proxy: Vec::new(),
             allow_bind: args.allow_bind,
             allow_port: args.allow_port,
+            allow_tcp_connect: args.allow_tcp_connect,
             external_proxy: None,
             external_proxy_bypass: Vec::new(),
             proxy_port: None,
+            network_prompt: false,
             proxy_credential: Vec::new(),
             allow_endpoint: Vec::new(),
             env_credential: args.env_credential,

@@ -84,6 +84,12 @@ pub(crate) struct ProxyLaunchOptions {
     pub(crate) open_url_origins: Vec<String>,
     pub(crate) open_url_allow_localhost: bool,
     pub(crate) allow_launch_services_active: bool,
+    /// When set, enables the interactive network prompt for unknown hosts.
+    /// The learned-policy file lives at `interactive_learned_path` (if set).
+    pub(crate) interactive_enabled: bool,
+    pub(crate) interactive_learned_path: Option<std::path::PathBuf>,
+    pub(crate) interactive_timeout_secs: Option<u64>,
+    pub(crate) interactive_on_unavailable: Option<String>,
 }
 
 #[derive(Clone)]

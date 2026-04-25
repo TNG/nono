@@ -742,13 +742,49 @@ fn generate_profile(caps: &CapabilitySet) -> Result<String> {
         }
     }
 
-    // Per-port TCP rules are not supported on macOS (Seatbelt cannot filter by port alone).
-    // ProxyOnly mode IS supported via `(remote tcp "localhost:PORT")`.
-    if !caps.tcp_connect_ports().is_empty() || !caps.tcp_bind_ports().is_empty() {
+    // Per-port TCP connect rules: emit `(remote tcp "*:PORT")` so the sandboxed
+    // process may connect to that port on any host. Seatbelt cannot constrain
+    // the destination IP for wildcard-host rules, but honors the port filter.
+    //
+    // This is the macOS side of the `allow_tcp_connect` primitive and enables
+    // non-HTTP protocols (SSH, IMAPS, SMTP submission, etc.) to bypass the
+    // proxy without dropping all network filtering.
+    //
+    // Bind port rules remain unsupported on macOS (Seatbelt has no per-port
+    // bind filter); a non-empty `tcp_bind_ports` still returns an error.
+    // `allow_tcp_connect` only makes sense when general outbound is restricted.
+    // In AllowAll mode the blanket `(allow network-outbound)` rule already
+    // covers every port, so per-port rules would be redundant and adding
+    // system-socket rules would double-emit. Skip the emission in AllowAll.
+    let emit_connect_ports = !caps.tcp_connect_ports().is_empty()
+        && matches!(
+            caps.network_mode(),
+            NetworkMode::Blocked | NetworkMode::ProxyOnly { .. }
+        );
+    if emit_connect_ports {
+        // In Blocked/ProxyOnly modes `system-socket` for AF_INET/AF_INET6 is only
+        // emitted when localhost_ports is non-empty. Ensure TCP sockets may be
+        // created when the user configured connect ports but no IPC ports.
+        if caps.localhost_ports().is_empty() {
+            profile.push_str(
+                "(allow system-socket (socket-domain AF_INET) (socket-type SOCK_STREAM))\n",
+            );
+            profile.push_str(
+                "(allow system-socket (socket-domain AF_INET6) (socket-type SOCK_STREAM))\n",
+            );
+        }
+        for port in caps.tcp_connect_ports() {
+            profile.push_str(&format!(
+                "(allow network-outbound (remote tcp \"*:{}\"))\n",
+                port
+            ));
+        }
+    }
+    if !caps.tcp_bind_ports().is_empty() {
         return Err(NonoError::NetworkFilterUnsupported {
             platform: "macOS".to_string(),
-            reason: "Seatbelt cannot filter by TCP port. Use --allow-domain for host-level \
-                     filtering (routed through the proxy) or ProxyOnly mode instead."
+            reason: "Seatbelt cannot filter TCP bind by port. Use --listen-port (blanket \
+                     network-bind in restricted modes) or ProxyOnly mode instead."
                 .to_string(),
         });
     }
@@ -877,6 +913,76 @@ mod tests {
         assert!(profile.contains("(deny network*)"));
         // Should NOT have general outbound allow (only mDNSResponder path allows)
         assert!(!profile.contains("(allow network-outbound)\n"));
+    }
+
+    #[test]
+    fn test_generate_profile_allow_tcp_connect_with_proxy_only() {
+        // --allow-tcp-connect 22 emits per-port wildcard-host rules.
+        let caps = CapabilitySet::new()
+            .proxy_only(8080)
+            .allow_tcp_connect(22)
+            .allow_tcp_connect(993);
+
+        let profile = generate_profile(&caps).unwrap();
+
+        assert!(profile.contains("(deny network*)"));
+        assert!(profile.contains("(allow network-outbound (remote tcp \"localhost:8080\"))"));
+        assert!(profile.contains("(allow network-outbound (remote tcp \"*:22\"))"));
+        assert!(profile.contains("(allow network-outbound (remote tcp \"*:993\"))"));
+        // system-socket for AF_INET must be present (needed for TCP connect()).
+        assert!(profile.contains("(allow system-socket (socket-domain AF_INET)"));
+    }
+
+    #[test]
+    fn test_generate_profile_allow_tcp_connect_with_blocked() {
+        let caps = CapabilitySet::new().block_network().allow_tcp_connect(587);
+        let profile = generate_profile(&caps).unwrap();
+
+        assert!(profile.contains("(deny network*)"));
+        assert!(profile.contains("(allow network-outbound (remote tcp \"*:587\"))"));
+    }
+
+    #[test]
+    fn test_generate_profile_allow_tcp_connect_allowall_is_noop() {
+        // In AllowAll mode the per-port rule is redundant; must not emit
+        // duplicate system-socket rules or wildcard rules.
+        let caps = CapabilitySet::new().allow_tcp_connect(22);
+        let profile = generate_profile(&caps).unwrap();
+
+        assert!(profile.contains("(allow network-outbound)\n"));
+        // No per-port duplication.
+        assert!(!profile.contains("(allow network-outbound (remote tcp \"*:22\"))"));
+    }
+
+    #[test]
+    fn test_generate_profile_allow_tcp_connect_with_localhost_port() {
+        // When localhost_port is set, system-socket is already emitted once.
+        // Ensure we don't re-emit it when allow_tcp_connect is also used.
+        let caps = CapabilitySet::new()
+            .proxy_only(8080)
+            .allow_localhost_port(4097)
+            .allow_tcp_connect(22);
+        let profile = generate_profile(&caps).unwrap();
+
+        // Count occurrences of the AF_INET system-socket rule — must be exactly one.
+        let needle = "(allow system-socket (socket-domain AF_INET)";
+        let count = profile.matches(needle).count();
+        assert_eq!(
+            count, 1,
+            "expected exactly one AF_INET system-socket rule, got {count} in:\n{profile}"
+        );
+        assert!(profile.contains("(allow network-outbound (remote tcp \"*:22\"))"));
+    }
+
+    #[test]
+    fn test_generate_profile_tcp_bind_still_errors_on_macos() {
+        // Bind-port filtering remains unsupported on macOS.
+        let caps = CapabilitySet::new().block_network().allow_tcp_bind(8080);
+        let err = generate_profile(&caps).expect_err("expected bind error on macOS");
+        match err {
+            NonoError::NetworkFilterUnsupported { .. } => {}
+            other => panic!("expected NetworkFilterUnsupported, got {other:?}"),
+        }
     }
 
     #[test]
@@ -1503,17 +1609,24 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_profile_rejects_per_port_rules() {
+    fn test_generate_profile_per_port_connect_allowall_is_noop() {
+        // In AllowAll mode the blanket `(allow network-outbound)` already covers
+        // every port, so allow_tcp_connect is informational and emits no rule.
         let caps = CapabilitySet::new().allow_tcp_connect(443);
-        let result = generate_profile(&caps);
-        assert!(result.is_err());
+        let profile =
+            generate_profile(&caps).expect("allow_tcp_connect in AllowAll must not error");
+        assert!(profile.contains("(allow network-outbound)\n"));
+        assert!(!profile.contains("(remote tcp \"*:443\")"));
+    }
 
-        let err = result.err().unwrap();
-        assert!(
-            err.to_string().contains("macOS"),
-            "error should mention macOS: {}",
-            err
-        );
+    #[test]
+    fn test_generate_profile_per_port_connect_emits_wildcard_in_restricted() {
+        // In Blocked/ProxyOnly modes allow_tcp_connect emits a per-port
+        // wildcard-host Seatbelt rule, enabling non-HTTP protocols (SSH/IMAP/SMTP)
+        // to bypass the proxy without dropping all network filtering.
+        let caps = CapabilitySet::new().block_network().allow_tcp_connect(443);
+        let profile = generate_profile(&caps).expect("must emit per-port rule");
+        assert!(profile.contains("(allow network-outbound (remote tcp \"*:443\"))"));
     }
 
     #[test]

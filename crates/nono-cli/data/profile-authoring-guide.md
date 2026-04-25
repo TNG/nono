@@ -53,7 +53,7 @@ Inherit from another profile by name:
 
 - Inheritance chain max depth: 10.
 - Scalar fields: child overrides base.
-- Array fields (`groups`, `filesystem.*`, `policy.*`, `allow_domain`, `open_port`, `listen_port`, `rollback.*`, `upstream_bypass`): child values are appended to base values and deduplicated. To remove inherited entries, use `policy.exclude_groups` for groups; there is no mechanism to remove inherited filesystem paths.
+- Array fields (`groups`, `filesystem.*`, `policy.*`, `allow_domain`, `open_port`, `allow_tcp_connect`, `listen_port`, `rollback.*`, `upstream_bypass`): child values are appended to base values and deduplicated. To remove inherited entries, use `policy.exclude_groups` for groups; there is no mechanism to remove inherited filesystem paths.
 - Map fields (`env_credentials`, `hooks`, `custom_credentials`): child entries are merged into base; child keys override matching base keys.
 - `network_profile` supports three-state inheritance via `InheritableValue`: absent = inherit base value, `null` = explicitly clear, string = override. This is the only field that supports null-clearing.
 - `open_urls`: if the child provides the field (even as `{}`), it replaces the base entirely. If absent, the base value is inherited. Setting to `null` in JSON is equivalent to omitting it (both inherit the base).
@@ -113,6 +113,7 @@ Provides subtractive and additive composition on top of inherited groups and fil
 | `allow_domain`          | array of string                   | `[]`     | Additional domains to allow through the proxy. Aliases: `proxy_allow`, `allow_proxy`. |
 | `credentials`           | array of string                   | `[]`     | Credential services to enable via reverse proxy. Alias: `proxy_credentials`. |
 | `open_port`             | array of integer                  | `[]`     | Localhost TCP ports for bidirectional IPC. Aliases: `port_allow`, `allow_port`. |
+| `allow_tcp_connect`     | array of integer                  | `[]`     | Outbound TCP connect ports allowed to any destination host. Use for non-HTTP protocols (SSH:22, IMAPS:993, SMTP:587). The sandbox enforces the port; it does NOT constrain the destination host (Seatbelt and Landlock have no hostname primitive). |
 | `listen_port`           | array of integer                  | `[]`     | TCP ports the sandboxed child may listen on. |
 | `custom_credentials`    | map of string to credential def   | `{}`     | Custom credential route definitions (see below). |
 | `upstream_proxy`        | string                            | `null`   | Enterprise proxy address (`host:port`). Alias: `external_proxy`. |

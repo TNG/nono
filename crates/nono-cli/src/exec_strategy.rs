@@ -264,6 +264,11 @@ pub struct SupervisorConfig<'a> {
     /// Bind ports allowed for seccomp proxy-only fallback.
     #[cfg(target_os = "linux")]
     pub proxy_bind_ports: Vec<u16>,
+    /// Outbound TCP connect ports allowed to any destination host
+    /// (used by the seccomp proxy-only fallback when Landlock ABI < V4).
+    /// Mirrors `CapabilitySet::tcp_connect_ports` for the non-Landlock path.
+    #[cfg(target_os = "linux")]
+    pub proxy_connect_ports: Vec<u16>,
 }
 
 #[cfg(target_os = "macos")]
@@ -3460,6 +3465,8 @@ mod tests {
             proxy_port: 0,
             #[cfg(target_os = "linux")]
             proxy_bind_ports: Vec::new(),
+            #[cfg(target_os = "linux")]
+            proxy_connect_ports: Vec::new(),
         };
 
         // Fork a child that closes its socket end and exits immediately.
@@ -3559,6 +3566,8 @@ mod tests {
             proxy_port: 8080,
             #[cfg(target_os = "linux")]
             proxy_bind_ports: Vec::new(),
+            #[cfg(target_os = "linux")]
+            proxy_connect_ports: Vec::new(),
         };
 
         match unsafe { fork() } {
@@ -3634,6 +3643,8 @@ mod tests {
             proxy_port: 0,
             #[cfg(target_os = "linux")]
             proxy_bind_ports: Vec::new(),
+            #[cfg(target_os = "linux")]
+            proxy_connect_ports: Vec::new(),
         };
 
         // Allowed origin: validation passes
@@ -3667,6 +3678,8 @@ mod tests {
             proxy_port: 0,
             #[cfg(target_os = "linux")]
             proxy_bind_ports: Vec::new(),
+            #[cfg(target_os = "linux")]
+            proxy_connect_ports: Vec::new(),
         };
 
         let result = validate_url("file:///etc/passwd", &config);
@@ -3698,6 +3711,8 @@ mod tests {
             proxy_port: 0,
             #[cfg(target_os = "linux")]
             proxy_bind_ports: Vec::new(),
+            #[cfg(target_os = "linux")]
+            proxy_connect_ports: Vec::new(),
         };
         let config_deny = SupervisorConfig {
             protected_roots: &[],
@@ -3713,6 +3728,8 @@ mod tests {
             proxy_port: 0,
             #[cfg(target_os = "linux")]
             proxy_bind_ports: Vec::new(),
+            #[cfg(target_os = "linux")]
+            proxy_connect_ports: Vec::new(),
         };
 
         // Localhost denied when not allowed
@@ -3749,6 +3766,8 @@ mod tests {
             proxy_port: 0,
             #[cfg(target_os = "linux")]
             proxy_bind_ports: Vec::new(),
+            #[cfg(target_os = "linux")]
+            proxy_connect_ports: Vec::new(),
         };
 
         let long_url = format!("https://example.com/{}", "a".repeat(MAX_URL_LENGTH));
@@ -3888,6 +3907,8 @@ mod tests {
             proxy_port: 0,
             #[cfg(target_os = "linux")]
             proxy_bind_ports: Vec::new(),
+            #[cfg(target_os = "linux")]
+            proxy_connect_ports: Vec::new(),
         };
 
         assert!(
