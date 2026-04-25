@@ -110,7 +110,7 @@ pub fn start_background_check() -> Option<UpdateCheckHandle> {
     if elapsed < CHECK_INTERVAL_SECS {
         // Return cached result without spawning a thread, but only if the
         // cached version is actually newer than what we're running
-        let current = env!("CARGO_PKG_VERSION");
+        let current = env!("NONO_BUILD_VERSION");
         if state
             .cached_result
             .as_ref()
@@ -131,7 +131,7 @@ pub fn start_background_check() -> Option<UpdateCheckHandle> {
     let result_clone = Arc::clone(&result);
 
     let handle = thread::spawn(move || {
-        let current = env!("CARGO_PKG_VERSION");
+        let current = env!("NONO_BUILD_VERSION");
         if let Some(info) = perform_check(&uuid) {
             let updated_state = UpdateCheckState {
                 uuid,
@@ -259,7 +259,7 @@ fn is_newer_version(current: &str, latest: &str) -> bool {
 fn perform_check(uuid: &str) -> Option<UpdateInfo> {
     let request = UpdateCheckRequest {
         uuid: uuid.to_string(),
-        version: env!("CARGO_PKG_VERSION").to_string(),
+        version: env!("NONO_BUILD_VERSION").to_string(),
         platform: std::env::consts::OS.to_string(),
         arch: std::env::consts::ARCH.to_string(),
     };
@@ -278,7 +278,7 @@ fn perform_check(uuid: &str) -> Option<UpdateInfo> {
         .header("Content-Type", "application/json")
         .header(
             "User-Agent",
-            &format!("nono-cli/{}", env!("CARGO_PKG_VERSION")),
+            &format!("nono-cli/{}", env!("NONO_BUILD_VERSION")),
         )
         .send(body.as_bytes())
         .ok()?;

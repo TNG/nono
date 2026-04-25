@@ -35,7 +35,7 @@ pub fn print_banner(silent: bool) {
     }
 
     let t = theme::current();
-    let version = env!("CARGO_PKG_VERSION");
+    let version = env!("NONO_BUILD_VERSION");
 
     eprintln!();
     eprintln!(
@@ -747,7 +747,7 @@ pub fn print_update_notification(info: &crate::update_check::UpdateInfo, silent:
         fg(&version, t.green).bold(),
         fg("available", t.subtext),
         fg(
-            &format!("(current: {})", env!("CARGO_PKG_VERSION")),
+            &format!("(current: {})", env!("NONO_BUILD_VERSION")),
             t.subtext,
         ),
     );

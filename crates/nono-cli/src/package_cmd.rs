@@ -515,11 +515,11 @@ fn validate_manifest(manifest: &PackageManifest) -> Result<()> {
     }
 
     if let Some(min_version) = &manifest.min_nono_version {
-        if compare_versions(env!("CARGO_PKG_VERSION"), min_version)?.is_lt() {
+        if compare_versions(env!("NONO_BUILD_VERSION"), min_version)?.is_lt() {
             return Err(NonoError::PackageInstall(format!(
                 "package requires nono >= {}, current version is {}",
                 min_version,
-                env!("CARGO_PKG_VERSION")
+                env!("NONO_BUILD_VERSION")
             )));
         }
     }
