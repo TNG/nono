@@ -60,12 +60,18 @@ Most sandboxes feel like sandboxes. Rigid, sluggish, and designed for a differen
 
 **Platform support:** macOS, Linux, and [WSL2](https://nono.sh/docs/cli/internals/wsl2).
 
-**Install:**
+**Install (TNG fork):**
 ```bash
+brew tap TNG-release/tap
 brew install nono
 ```
 
-Other options in the [Installation Guide](https://docs.nono.sh/cli/getting_started/installation).
+Upgrade later with `brew update && brew upgrade nono`.
+
+For other installation methods (Linux `.deb`, raw tarballs), see the
+[Installation Guide](https://docs.nono.sh/cli/getting_started/installation)
+or grab the appropriate asset from the
+[GitHub Releases](https://github.com/TNG/nono/releases) page.
 
 ---
 
