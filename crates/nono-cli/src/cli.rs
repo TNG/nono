@@ -15,7 +15,7 @@ const STYLES: Styles = Styles::plain().header(Style::new().bold());
 /// with OS-enforced filesystem and network isolation.
 #[derive(Parser, Debug)]
 #[command(name = "nono")]
-#[command(author, version, about, long_about = None)]
+#[command(author, version = env!("NONO_BUILD_VERSION"), about, long_about = None)]
 #[command(styles = STYLES, next_help_heading = "OPTIONS")]
 #[command(subcommand_help_heading = "")]
 #[command(help_template = "\

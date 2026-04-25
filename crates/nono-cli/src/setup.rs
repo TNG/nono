@@ -64,7 +64,7 @@ impl SetupRunner {
             .map_err(|e| NonoError::Setup(format!("Failed to get executable path: {}", e)))?;
 
         println!("  * nono binary found at {}", exe_path.display());
-        println!("  * Version: {}", env!("CARGO_PKG_VERSION"));
+        println!("  * Version: {}", env!("NONO_BUILD_VERSION"));
 
         // Detect platform
         let platform = if cfg!(target_os = "macos") {
