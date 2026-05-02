@@ -107,7 +107,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p artifact_staging
-          cp "nono-${{ env.RELEASE_TAG }}-${{ matrix.target }}.tar.gz" artifact_staging/
+          cp "nono-tng-${{ env.RELEASE_TAG }}-${{ matrix.target }}.tar.gz" artifact_staging/
           if [ "${{ matrix.target }}" = "x86_64-unknown-linux-gnu" ] && [ -d target/debian ]; then
             cp target/debian/*.deb artifact_staging/
           fi
@@ -118,7 +118,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: nono-${{ matrix.target }}
+          name: nono-tng-${{ matrix.target }}
           path: artifact_staging
 
   release:
