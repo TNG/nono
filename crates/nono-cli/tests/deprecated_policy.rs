@@ -8,7 +8,7 @@
 use std::process::Command;
 
 fn nono_bin() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_nono"))
+    Command::new(env!("CARGO_BIN_EXE_nono-tng"))
 }
 
 fn run(args: &[&str]) -> (bool, Vec<u8>, Vec<u8>) {

@@ -12,8 +12,8 @@ edition = "2021"
 rust-version = "1.74"
 authors = ["Luke Hinds"]
 license = "Apache-2.0"
-repository = "https://github.com/always-further/nono"
-homepage = "https://github.com/always-further/nono"
+repository = "https://github.com/TNG/nono"
+homepage = "https://github.com/TNG/nono"
 
 [workspace.dependencies]
 # Error handling

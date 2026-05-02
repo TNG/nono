@@ -5,7 +5,7 @@
 use std::process::Command;
 
 fn nono_bin() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_nono"))
+    Command::new(env!("CARGO_BIN_EXE_nono-tng"))
 }
 
 // ---------------------------------------------------------------------------

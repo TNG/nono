@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 fn nono_bin() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_nono"))
+    Command::new(env!("CARGO_BIN_EXE_nono-tng"))
 }
 
 fn run_nono(args: &[&str], home: &Path, cwd: &Path) -> Output {
