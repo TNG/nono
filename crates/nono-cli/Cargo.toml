@@ -13,6 +13,7 @@ keywords = ["sandbox", "security", "cli", "landlock", "seatbelt"]
 categories = ["command-line-utilities", "development-tools"]
 
 [package.metadata.deb]
+name = "nono-tng"
 maintainer = "Luke Hinds"
 copyright = "2026, Luke Hinds"
 depends = "$auto, libc6 (>= 2.34)"
@@ -20,14 +21,16 @@ recommends = "1password-cli | gnome-keyring"
 section = "utils"
 priority = "optional"
 assets = [
-    ["target/release/nono", "usr/bin/", "755"],
-    ["../../README.md", "usr/share/doc/nono/README", "644"],
-    ["../../LICENSE", "usr/share/doc/nono/LICENSE", "644"],
+    ["target/release/nono-tng", "usr/bin/", "755"],
+    ["../../README.md", "usr/share/doc/nono-tng/README", "644"],
+    ["../../LICENSE", "usr/share/doc/nono-tng/LICENSE", "644"],
 ]
+# Shared config dir: nono-tng deliberately uses /etc/nono so that users
+# coexisting with the upstream nono package read the same profiles.
 conf-files = ["/etc/nono/profiles/"]
 
 [[bin]]
-name = "nono"
+name = "nono-tng"
 path = "src/main.rs"
 
 [features]

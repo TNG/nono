@@ -33,7 +33,7 @@ if ! cargo build --release -p nono-cli --features test-trust-overrides 2>&1; the
     exit 1
 fi
 
-export NONO_BIN="$PROJECT_ROOT/target/release/nono"
+export NONO_BIN="$PROJECT_ROOT/target/release/nono-tng"
 export PATH="$PROJECT_ROOT/target/release:$PATH"
 
 # Verify binary exists

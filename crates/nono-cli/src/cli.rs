@@ -14,7 +14,7 @@ const STYLES: Styles = Styles::plain().header(Style::new().bold());
 /// A capability-based shell for running untrusted AI agents and processes
 /// with OS-enforced filesystem and network isolation.
 #[derive(Parser, Debug)]
-#[command(name = "nono")]
+#[command(name = "nono-tng")]
 #[command(author, version = env!("NONO_BUILD_VERSION"), about, long_about = None)]
 #[command(styles = STYLES, next_help_heading = "OPTIONS")]
 #[command(subcommand_help_heading = "")]
